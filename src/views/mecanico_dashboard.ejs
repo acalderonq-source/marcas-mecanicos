@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Mecánico - Control de Jornada</title>
+
+  <!-- Bootstrap 5 -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+<link rel="manifest" href="/manifest.json">
+
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js");
+  }
+</script>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Mecánico">
+<link rel="apple-touch-icon" href="/img/logo-tomza-192.png">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <!-- CSS propio -->
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-body">
+  <!-- Topbar -->
+  <header class="topbar d-flex align-items-center justify-content-between px-3">
+    <div class="d-flex align-items-center gap-2">
+      <img src="/img/logo-tomza-blanco.png" alt="Tomza" class="topbar-logo">
+      <div class="d-flex flex-column">
+        <span class="topbar-title">Control de Mecánico</span>
+        <span class="topbar-subtitle">Hoy: <%= today %></span>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+      <div class="d-flex flex-column text-end">
+        <span class="small text-muted">Usuario</span>
+        <span class="fw-semibold text-white"><%= user.name %></span>
+      </div>
+      <a href="/logout" class="btn btn-outline-light btn-sm px-3">Salir</a>
+    </div>
+  </header>
+
+  <main class="container py-3">
+    <div class="row g-3">
+      <!-- Card Asistencia -->
+      <div class="col-12 col-lg-5">
+        <div class="card card-soft shadow-sm border-0 animate-fade">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h2 class="h6 mb-0 d-flex align-items-center gap-2">
+                <span class="badge bg-primary-soft rounded-circle icon-circle">
+                  ⏱️
+                </span>
+                Asistencia de hoy
+              </h2>
+            </div>
+
+            <% if (!attendance) { %>
+              <p class="small text-muted mb-3">
+                Aún no has marcado <strong>entrada</strong> el día de hoy.
+              </p>
+
+              <form
+                action="/mecanico/entrada"
+                method="POST"
+                enctype="multipart/form-data"
+                class="mt-2"
+              >
+                <div class="mb-2">
+                  <label class="form-label small text-muted">
+                    Foto de entrada (obligatoria, tomada en el momento)
+                  </label>
+                  <input
+                    type="file"
+                    name="photo"
+                    class="form-control form-control-sm"
+                    accept="image/*;capture=camera"
+                    capture="environment"
+                    required
+                  >
+                  <div class="form-text small">
+                    La cámara se abrirá directamente en el teléfono.
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-warning btn-sm w-100">
+                  ⏺️ Marcar ENTRADA
+                </button>
+              </form>
+            <% } else { %>
+              <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <span class="small text-muted d-block">Entrada</span>
+                    <span class="fw-semibold">
+                      <%= attendance.check_in.toLocaleString('es-CR') %>
+                    </span>
+                  </div>
+                  <% if (attendance.check_in_photo) { %>
+                    <div>
+                      <img
+                        src="<%= attendance.check_in_photo %>"
+                        alt="Foto entrada"
+                        class="photo-thumb"
+                      >
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+
+              <% if (!attendance.check_out) { %>
+                <form
+                  action="/mecanico/salida"
+                  method="POST"
+                  enctype="multipart/form-data"
+                  class="mt-2"
+                >
+                  <div class="mb-2">
+                    <label class="form-label small text-muted">
+                      Foto de salida (obligatoria, tomada en el momento)
+                    </label>
+                    <input
+                      type="file"
+                      name="photo"
+                      class="form-control form-control-sm"
+                      accept="image/*;capture=camera"
+                      capture="environment"
+                      required
+                    >
+                    <div class="form-text small">
+                      Debe tomarse en el sitio al finalizar la jornada.
+                    </div>
+                  </div>
+
+                  <button type="submit" class="btn btn-danger btn-sm w-100">
+                    ⏹️ Marcar SALIDA
+                  </button>
+                </form>
+              <% } else { %>
+                <div class="mb-2">
+                  <div class="d-flex justify-content-between">
+                    <div>
+                      <span class="small text-muted d-block">Salida</span>
+                      <span class="fw-semibold">
+                        <%= attendance.check_out.toLocaleString('es-CR') %>
+                      </span>
+                    </div>
+                    <% if (attendance.check_out_photo) { %>
+                      <div>
+                        <img
+                          src="<%= attendance.check_out_photo %>"
+                          alt="Foto salida"
+                          class="photo-thumb"
+                        >
+                      </div>
+                    <% } %>
+                  </div>
+                </div>
+
+                <div class="mt-2 small">
+                  <div>
+                    <span class="text-muted">Horas normales:</span>
+                    <strong><%= attendance.normal_hours %></strong>
+                  </div>
+                  <div>
+                    <span class="text-muted">Horas extra:</span>
+                    <strong><%= attendance.extra_hours %></strong>
+                  </div>
+                </div>
+              <% } %>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Trabajos -->
+      <div class="col-12 col-lg-7">
+        <div class="card card-soft shadow-sm border-0 animate-fade">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h2 class="h6 mb-0 d-flex align-items-center gap-2">
+                <span class="badge bg-primary-soft rounded-circle icon-circle">
+                  📝
+                </span>
+                Trabajos de hoy
+              </h2>
+            </div>
+
+            <!-- Formulario registrar trabajo -->
+            <form
+              action="/mecanico/trabajos"
+              method="POST"
+              class="mb-3"
+            >
+              <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-4">
+                  <label class="form-label small text-muted">
+                    Placa unidad
+                  </label>
+                  <input
+                    type="text"
+                    name="plate"
+                    class="form-control form-control-sm"
+                    required
+                    placeholder="C170133"
+                  >
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label small text-muted">
+                    Tipo de trabajo
+                  </label>
+                  <input
+                    type="text"
+                    name="job_type"
+                    class="form-control form-control-sm"
+                    required
+                    placeholder="Correctivo, Preventivo..."
+                  >
+                </div>
+                <div class="col-12 col-md-4 d-grid">
+                  <button type="submit" class="btn btn-primary btn-sm mt-3 mt-md-0">
+                    📝 Registrar trabajo
+                  </button>
+                </div>
+              </div>
+
+              <div class="mt-2">
+                <label class="form-label small text-muted">
+                  Descripción / detalle
+                </label>
+                <textarea
+                  name="description"
+                  rows="2"
+                  class="form-control form-control-sm"
+                  placeholder="Detalle del trabajo realizado..."
+                ></textarea>
+              </div>
+            </form>
+
+            <!-- Tabla de trabajos -->
+            <% if (jobs.length === 0) { %>
+              <p class="small text-muted mb-0">
+                No hay trabajos registrados el día de hoy.
+              </p>
+            <% } else { %>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle table-hover small">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="text-nowrap">Fecha</th>
+                      <th class="text-nowrap">Placa</th>
+                      <th class="text-nowrap">Tipo</th>
+                      <th>Detalle</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% jobs.forEach(j => { %>
+                      <tr>
+                        <td class="text-nowrap">
+                          <%= j.date.toISOString().slice(0,10) %>
+                        </td>
+                        <td class="fw-semibold"><%= j.plate %></td>
+                        <td><span class="badge bg-secondary-soft"><%= j.job_type %></span></td>
+                        <td><%= j.description %></td>
+                      </tr>
+                    <% }); %>
+                  </tbody>
+                </table>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
