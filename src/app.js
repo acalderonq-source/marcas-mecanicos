@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const multer = require('multer');
 const fs = require('fs');
 const db = require('./db');
+process.env.TZ = 'America/Costa_Rica';
 
 dotenv.config();
 
