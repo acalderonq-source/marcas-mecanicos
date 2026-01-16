@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3000;
 // ==============================
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
+  fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -112,6 +112,11 @@ function calcularHoras(checkIn, checkOut) {
   };
 }
 
+// Helper para fecha de hoy en formato YYYY-MM-DD (simple)
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 // ==============================
 // Rutas básicas
 // ==============================
@@ -126,7 +131,9 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+  const username = (req.body.username || '').trim();
+  const password = (req.body.password || '').trim();
+
   try {
     const [rows] = await db.query(
       'SELECT * FROM users WHERE username = ? AND password = ?',
@@ -142,7 +149,7 @@ app.post('/login', async (req, res) => {
     };
     res.redirect('/');
   } catch (err) {
-    console.error(err);
+    console.error('Error en /login:', err);
     res.status(500).send('Error en el servidor');
   }
 });
@@ -158,7 +165,8 @@ app.get('/logout', (req, res) => {
 // ==============================
 app.get('/mecanico', requireAuth('MECANICO'), async (req, res) => {
   const userId = req.session.user.id;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyISO();
+
   try {
     const [rows] = await db.query(
       'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
@@ -173,7 +181,7 @@ app.get('/mecanico', requireAuth('MECANICO'), async (req, res) => {
 
     res.render('mecanico_dashboard', { attendance, jobs, today });
   } catch (err) {
-    console.error(err);
+    console.error('Error en GET /mecanico:', err);
     res.status(500).send('Error en el servidor');
   }
 });
@@ -187,12 +195,15 @@ app.post(
   upload.single('photo'),
   async (req, res) => {
     const userId = req.session.user.id;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hoyISO();
     const now = new Date();
 
     // Foto obligatoria
     if (!req.file) {
-      return res.status(400).send('Se requiere una foto tomada en el momento para marcar entrada.');
+      console.error('No se recibió archivo de foto en /mecanico/entrada');
+      return res
+        .status(400)
+        .send('Se requiere una foto tomada en el momento para marcar entrada.');
     }
 
     const photoPath = '/uploads/' + path.basename(req.file.path);
@@ -204,6 +215,7 @@ app.post(
         [userId, today]
       );
       if (existing.length > 0) {
+        // Ya había marcado entrada hoy
         return res.redirect('/mecanico');
       }
 
@@ -213,7 +225,7 @@ app.post(
       );
       res.redirect('/mecanico');
     } catch (err) {
-      console.error(err);
+      console.error('Error en POST /mecanico/entrada:', err);
       res.status(500).send('Error en el servidor');
     }
   }
@@ -228,11 +240,11 @@ app.post(
   upload.single('photo'),
   async (req, res) => {
     const userId = req.session.user.id;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hoyISO();
     const now = new Date();
 
-    // Foto obligatoria
     if (!req.file) {
+      console.error('No se recibió archivo de foto en /mecanico/salida');
       return res
         .status(400)
         .send('Se requiere una foto tomada en el momento para marcar salida.');
@@ -262,7 +274,7 @@ app.post(
 
       res.redirect('/mecanico');
     } catch (err) {
-      console.error(err);
+      console.error('Error en POST /mecanico/salida:', err);
       res.status(500).send('Error en el servidor');
     }
   }
@@ -277,7 +289,7 @@ app.post(
   async (req, res) => {
     const userId = req.session.user.id;
     const { plate, job_type, description } = req.body;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hoyISO();
 
     try {
       const [attRows] = await db.query(
@@ -292,7 +304,7 @@ app.post(
       );
       res.redirect('/mecanico');
     } catch (err) {
-      console.error(err);
+      console.error('Error en POST /mecanico/trabajos:', err);
       res.status(500).send('Error en el servidor');
     }
   }
@@ -349,7 +361,7 @@ app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
       totalExtras
     });
   } catch (err) {
-    console.error(err);
+    console.error('Error en GET /admin:', err);
     res.status(500).send('Error en el servidor');
   }
 });
@@ -357,6 +369,6 @@ app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
 // ==============================
 // Arrancar servidor
 // ==============================
-app.listen(process.env.PORT || 3000, () => {
-  console.log(`Servidor escuchando en http://localhost:${process.env.PORT || 3000}`);
+app.listen(PORT, () => {
+  console.log(`Servidor escuchando en http://localhost:${PORT}`);
 });
