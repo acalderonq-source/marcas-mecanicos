@@ -64,31 +64,29 @@ function requireAuth(role) {
 // Utilidades
 // ==============================
 function hoyISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function normalizarEntrada(fecha) {
-  const d = new Date(fecha);
-  if (d.getHours() < 8) d.setHours(8, 0, 0, 0);
-  return d;
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function calcularHoras(checkIn, checkOut) {
   const diffMs = checkOut - checkIn;
   const totalHours = diffMs / (1000 * 60 * 60);
-  const weekday = checkIn.getDay();
+  const weekday = checkIn.getDay(); // 0 domingo
 
   let jornada = 0;
   let lunch = 0;
 
   if (weekday >= 1 && weekday <= 5) {
-    jornada = 8.5;
-    lunch = 0.5;
+    jornada = 8.5;   // L–V 8.5 horas netas
+    lunch = 0.5;     // 30 min almuerzo
   } else if (weekday === 6) {
-    jornada = 6;
+    jornada = 6;     // Sábado 6 horas
     lunch = 0;
   } else {
-    jornada = 0;
+    jornada = 0;     // Domingo todo es extra
     lunch = 0;
   }
 
@@ -158,12 +156,15 @@ app.get('/mecanico', requireAuth('MECANICO'), async (req, res) => {
   res.render('mecanico_dashboard', { attendance: attendance[0] || null, jobs, today });
 });
 
+// ==============================
+// Entrada
+// ==============================
 app.post('/mecanico/entrada', requireAuth('MECANICO'), upload.single('photo'), async (req, res) => {
   if (!req.file) return res.status(400).send('Foto obligatoria');
 
   const userId = req.session.user.id;
   const today = hoyISO();
-  const now = normalizarEntrada(new Date());
+  const now = new Date();
 
   const [existe] = await db.query(
     'SELECT id FROM attendance WHERE user_id = ? AND date = ?',
@@ -180,6 +181,9 @@ app.post('/mecanico/entrada', requireAuth('MECANICO'), upload.single('photo'), a
   res.redirect('/mecanico');
 });
 
+// ==============================
+// Salida
+// ==============================
 app.post('/mecanico/salida', requireAuth('MECANICO'), upload.single('photo'), async (req, res) => {
   if (!req.file) return res.status(400).send('Foto obligatoria');
 
@@ -244,7 +248,15 @@ app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
     totalDebits += Number(r.debit_hours || 0);
   });
 
-  res.render('admin_dashboard', { attendance: rows, jobs, from: startDate, to: endDate, totalNormal, totalExtras, totalDebits });
+  res.render('admin_dashboard', {
+    attendance: rows,
+    jobs,
+    from: startDate,
+    to: endDate,
+    totalNormal,
+    totalExtras,
+    totalDebits
+  });
 });
 
 // ==============================
