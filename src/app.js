@@ -149,25 +149,17 @@ function calcularHoras(checkIn, checkOut) {
   const weekday = checkIn.getDay();
 
   let jornada = 0;
-  let lunch = 0;
 
-  if (weekday >= 1 && weekday <= 5) {
+if (weekday >= 1 && weekday <= 5) {
 
-    jornada = 8.5;
-    lunch = 0.5;
+  jornada = 8.5;
 
-  } else if (weekday === 6) {
+} else if (weekday === 6) {
 
-    jornada = 6;
-    lunch = 0;
+  jornada = 6;
 
-  } else {
-
-    jornada = 0;
-    lunch = 0;
-  }
-
-  let netHours = totalHours - lunch;
+}
+let netHours = totalHours;
 
   if (netHours < 0) netHours = 0;
 
