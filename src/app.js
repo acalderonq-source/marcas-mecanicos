@@ -27,6 +27,7 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + ext);
   }
 });
+
 const upload = multer({ storage });
 
 // ==============================
@@ -34,6 +35,7 @@ const upload = multer({ storage });
 // ==============================
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(uploadsDir));
@@ -55,7 +57,9 @@ app.use((req, res, next) => {
 function requireAuth(role) {
   return (req, res, next) => {
     if (!req.session.user) return res.redirect('/login');
-    if (role && req.session.user.role !== role) return res.status(403).send('No autorizado');
+    if (role && req.session.user.role !== role) {
+      return res.status(403).send('No autorizado');
+    }
     next();
   };
 }
@@ -71,6 +75,16 @@ function hoyISO() {
   return `${y}-${m}-${d}`;
 }
 
+function horasAFormato(horas) {
+  if (!horas || Number(horas) <= 0) return '0:00';
+
+  const totalMinutos = Math.round(Number(horas) * 60);
+  const h = Math.floor(totalMinutos / 60);
+  const m = totalMinutos % 60;
+
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+
 function calcularHoras(checkIn, checkOut) {
   const diffMs = checkOut - checkIn;
   const totalHours = diffMs / (1000 * 60 * 60);
@@ -80,13 +94,16 @@ function calcularHoras(checkIn, checkOut) {
   let lunch = 0;
 
   if (weekday >= 1 && weekday <= 5) {
-    jornada = 8.5;   // L–V 8.5 horas netas
-    lunch = 0.5;     // 30 min almuerzo
+    // Lunes a viernes: 8.5 horas netas
+    jornada = 8.5;
+    lunch = 0.5;
   } else if (weekday === 6) {
-    jornada = 6;     // Sábado 6 horas
+    // Sábado
+    jornada = 6;
     lunch = 0;
   } else {
-    jornada = 0;     // Domingo todo es extra
+    // Domingo
+    jornada = 0;
     lunch = 0;
   }
 
@@ -118,18 +135,30 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-  const username = (req.body.username || '').trim();
-  const password = (req.body.password || '').trim();
+  try {
+    const username = (req.body.username || '').trim();
+    const password = (req.body.password || '').trim();
 
-  const [rows] = await db.query(
-    'SELECT * FROM users WHERE username = ? AND password = ?',
-    [username, password]
-  );
+    const [rows] = await db.query(
+      'SELECT * FROM users WHERE username = ? AND password = ?',
+      [username, password]
+    );
 
-  if (!rows.length) return res.render('login', { error: 'Credenciales inválidas' });
+    if (!rows.length) {
+      return res.render('login', { error: 'Credenciales inválidas' });
+    }
 
-  req.session.user = { id: rows[0].id, name: rows[0].name, role: rows[0].role };
-  res.redirect('/');
+    req.session.user = {
+      id: rows[0].id,
+      name: rows[0].name,
+      role: rows[0].role
+    };
+
+    res.redirect('/');
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).send('Error en el servidor');
+  }
 });
 
 app.get('/logout', (req, res) => {
@@ -140,125 +169,216 @@ app.get('/logout', (req, res) => {
 // Mecánico
 // ==============================
 app.get('/mecanico', requireAuth('MECANICO'), async (req, res) => {
-  const today = hoyISO();
-  const userId = req.session.user.id;
+  try {
+    const today = hoyISO();
+    const userId = req.session.user.id;
 
-  const [attendance] = await db.query(
-    'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
-    [userId, today]
-  );
+    const [attendance] = await db.query(
+      'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
+      [userId, today]
+    );
 
-  const [jobs] = await db.query(
-    'SELECT * FROM jobs WHERE user_id = ? AND date = ? ORDER BY id DESC',
-    [userId, today]
-  );
+    const [jobs] = await db.query(
+      'SELECT * FROM jobs WHERE user_id = ? AND date = ? ORDER BY id DESC',
+      [userId, today]
+    );
 
-  res.render('mecanico_dashboard', { attendance: attendance[0] || null, jobs, today });
+    res.render('mecanico_dashboard', {
+      attendance: attendance[0] || null,
+      jobs,
+      today
+    });
+  } catch (error) {
+    console.error('Error en GET /mecanico:', error);
+    res.status(500).send('Error en el servidor');
+  }
 });
 
 // ==============================
 // Entrada
 // ==============================
 app.post('/mecanico/entrada', requireAuth('MECANICO'), upload.single('photo'), async (req, res) => {
-  if (!req.file) return res.status(400).send('Foto obligatoria');
+  try {
+    if (!req.file) {
+      return res.status(400).send('Foto obligatoria');
+    }
 
-  const userId = req.session.user.id;
-  const today = hoyISO();
-  const now = new Date();
+    const userId = req.session.user.id;
+    const today = hoyISO();
+    const now = new Date();
 
-  const [existe] = await db.query(
-    'SELECT id FROM attendance WHERE user_id = ? AND date = ?',
-    [userId, today]
-  );
+    const [existe] = await db.query(
+      'SELECT id FROM attendance WHERE user_id = ? AND date = ?',
+      [userId, today]
+    );
 
-  if (existe.length) return res.redirect('/mecanico');
+    if (existe.length) {
+      return res.redirect('/mecanico');
+    }
 
-  await db.query(
-    'INSERT INTO attendance (user_id, date, check_in, check_in_photo) VALUES (?, ?, ?, ?)',
-    [userId, today, now, '/uploads/' + path.basename(req.file.path)]
-  );
+    await db.query(
+      'INSERT INTO attendance (user_id, date, check_in, check_in_photo) VALUES (?, ?, ?, ?)',
+      [userId, today, now, '/uploads/' + path.basename(req.file.path)]
+    );
 
-  res.redirect('/mecanico');
+    res.redirect('/mecanico');
+  } catch (error) {
+    console.error('Error en POST /mecanico/entrada:', error);
+    res.status(500).send('Error en el servidor');
+  }
 });
 
 // ==============================
 // Salida
 // ==============================
 app.post('/mecanico/salida', requireAuth('MECANICO'), upload.single('photo'), async (req, res) => {
-  if (!req.file) return res.status(400).send('Foto obligatoria');
+  try {
+    if (!req.file) {
+      return res.status(400).send('Foto obligatoria');
+    }
 
-  const userId = req.session.user.id;
-  const today = hoyISO();
-  const now = new Date();
+    const userId = req.session.user.id;
+    const today = hoyISO();
+    const now = new Date();
 
-  const [rows] = await db.query(
-    'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
-    [userId, today]
-  );
+    const [rows] = await db.query(
+      'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
+      [userId, today]
+    );
 
-  if (!rows.length) return res.redirect('/mecanico');
+    if (!rows.length) {
+      return res.redirect('/mecanico');
+    }
 
-  const { normalHours, extraHours, debitHours } = calcularHoras(new Date(rows[0].check_in), now);
+    const checkIn = new Date(rows[0].check_in);
+    const { normalHours, extraHours, debitHours } = calcularHoras(checkIn, now);
 
-  await db.query(
-    'UPDATE attendance SET check_out=?, check_out_photo=?, normal_hours=?, extra_hours=?, debit_hours=? WHERE id=?',
-    [now, '/uploads/' + path.basename(req.file.path), normalHours, extraHours, debitHours, rows[0].id]
-  );
+    await db.query(
+      `UPDATE attendance
+       SET check_out = ?,
+           check_out_photo = ?,
+           normal_hours = ?,
+           extra_hours = ?,
+           debit_hours = ?
+       WHERE id = ?`,
+      [
+        now,
+        '/uploads/' + path.basename(req.file.path),
+        normalHours,
+        extraHours,
+        debitHours,
+        rows[0].id
+      ]
+    );
 
-  res.redirect('/mecanico');
+    res.redirect('/mecanico');
+  } catch (error) {
+    console.error('Error en POST /mecanico/salida:', error);
+    res.status(500).send('Error en el servidor');
+  }
+});
+
+// ==============================
+// Registrar trabajo
+// ==============================
+app.post('/mecanico/trabajos', requireAuth('MECANICO'), async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    const today = hoyISO();
+    const { plate, job_type, description } = req.body;
+
+    const [attRows] = await db.query(
+      'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
+      [userId, today]
+    );
+
+    const attendanceId = attRows.length ? attRows[0].id : null;
+
+    await db.query(
+      `INSERT INTO jobs (user_id, attendance_id, date, plate, job_type, description)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, attendanceId, today, plate, job_type, description]
+    );
+
+    res.redirect('/mecanico');
+  } catch (error) {
+    console.error('Error en POST /mecanico/trabajos:', error);
+    res.status(500).send('Error en el servidor');
+  }
 });
 
 // ==============================
 // Admin
 // ==============================
 app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
-  const { from, to } = req.query;
-  let startDate = from;
-  let endDate = to;
+  try {
+    const { from, to } = req.query;
+    let startDate = from;
+    let endDate = to;
 
-  if (!startDate || !endDate) {
-    const today = new Date();
-    const weekAgo = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
-    startDate = weekAgo.toISOString().slice(0, 10);
-    endDate = today.toISOString().slice(0, 10);
+    if (!startDate || !endDate) {
+      const today = new Date();
+      const weekAgo = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+      startDate = weekAgo.toISOString().slice(0, 10);
+      endDate = today.toISOString().slice(0, 10);
+    }
+
+    const [rows] = await db.query(
+      `SELECT a.*, u.name
+       FROM attendance a
+       JOIN users u ON a.user_id = u.id
+       WHERE a.date BETWEEN ? AND ?
+       ORDER BY a.date DESC`,
+      [startDate, endDate]
+    );
+
+    const [jobs] = await db.query(
+      `SELECT j.*, u.name
+       FROM jobs j
+       JOIN users u ON j.user_id = u.id
+       WHERE j.date BETWEEN ? AND ?
+       ORDER BY j.date DESC`,
+      [startDate, endDate]
+    );
+
+    let totalNormal = 0;
+    let totalExtras = 0;
+    let totalDebits = 0;
+
+    rows.forEach(r => {
+      totalNormal += Number(r.normal_hours || 0);
+      totalExtras += Number(r.extra_hours || 0);
+      totalDebits += Number(r.debit_hours || 0);
+
+      r.normal_hours_fmt = horasAFormato(r.normal_hours);
+      r.extra_hours_fmt = horasAFormato(r.extra_hours);
+      r.debit_hours_fmt = horasAFormato(r.debit_hours);
+    });
+
+    const totalBanco = Math.max(totalExtras - totalDebits, 0);
+
+    res.render('admin_dashboard', {
+      attendance: rows,
+      jobs,
+      from: startDate,
+      to: endDate,
+      totalNormal,
+      totalExtras,
+      totalDebits,
+      totalBanco,
+      totalNormalFmt: horasAFormato(totalNormal),
+      totalExtrasFmt: horasAFormato(totalExtras),
+      totalDebitsFmt: horasAFormato(totalDebits),
+      totalBancoFmt: horasAFormato(totalBanco)
+    });
+  } catch (error) {
+    console.error('Error en GET /admin:', error);
+    res.status(500).send('Error en el servidor');
   }
-
-  const [rows] = await db.query(
-    `SELECT a.*, u.name
-     FROM attendance a
-     JOIN users u ON a.user_id = u.id
-     WHERE a.date BETWEEN ? AND ?
-     ORDER BY a.date DESC`,
-    [startDate, endDate]
-  );
-
-  const [jobs] = await db.query(
-    `SELECT j.*, u.name
-     FROM jobs j
-     JOIN users u ON j.user_id = u.id
-     WHERE j.date BETWEEN ? AND ?
-     ORDER BY j.date DESC`,
-    [startDate, endDate]
-  );
-
-  let totalNormal = 0, totalExtras = 0, totalDebits = 0;
-  rows.forEach(r => {
-    totalNormal += Number(r.normal_hours || 0);
-    totalExtras += Number(r.extra_hours || 0);
-    totalDebits += Number(r.debit_hours || 0);
-  });
-
-  res.render('admin_dashboard', {
-    attendance: rows,
-    jobs,
-    from: startDate,
-    to: endDate,
-    totalNormal,
-    totalExtras,
-    totalDebits
-  });
 });
 
+// ==============================
+// Arranque
 // ==============================
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
