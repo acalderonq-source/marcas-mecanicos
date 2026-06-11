@@ -33,13 +33,11 @@ app.use('/uploads', express.static(uploadsDir));
 //////////////////////////////////////////////////////
 
 const storage = multer.diskStorage({
-
   destination: function (req, file, cb) {
     cb(null, uploadsDir);
   },
 
   filename: function (req, file, cb) {
-
     const ext = path.extname(file.originalname) || '.jpg';
 
     const uniqueName =
@@ -50,7 +48,6 @@ const storage = multer.diskStorage({
 
     cb(null, uniqueName);
   }
-
 });
 
 const upload = multer({ storage });
@@ -63,7 +60,6 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 
 app.use(express.urlencoded({ extended: true }));
-
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 //////////////////////////////////////////////////////
@@ -88,9 +84,7 @@ app.use((req, res, next) => {
 //////////////////////////////////////////////////////
 
 function requireAuth(role) {
-
   return (req, res, next) => {
-
     if (!req.session.user) {
       return res.redirect('/login');
     }
@@ -108,7 +102,6 @@ function requireAuth(role) {
 //////////////////////////////////////////////////////
 
 function hoyISO() {
-
   const now = new Date();
 
   const y = now.getFullYear();
@@ -123,7 +116,6 @@ function hoyISO() {
 //////////////////////////////////////////////////////
 
 function horasAFormato(horas) {
-
   if (!horas || Number(horas) <= 0) {
     return '0:00';
   }
@@ -141,32 +133,24 @@ function horasAFormato(horas) {
 //////////////////////////////////////////////////////
 
 function calcularHoras(checkIn, checkOut) {
-
   const diffMs = checkOut - checkIn;
-
   const totalHours = diffMs / (1000 * 60 * 60);
-
   const weekday = checkIn.getDay();
 
   let jornada = 0;
 
-if (weekday >= 1 && weekday <= 5) {
+  if (weekday >= 1 && weekday <= 5) {
+    jornada = 8.5;
+  } else if (weekday === 6) {
+    jornada = 6;
+  }
 
-  jornada = 8.5;
-
-} else if (weekday === 6) {
-
-  jornada = 6;
-
-}
-let netHours = totalHours;
+  let netHours = totalHours;
 
   if (netHours < 0) netHours = 0;
 
   const normalHours = Math.min(netHours, jornada);
-
   const extraHours = Math.max(netHours - jornada, 0);
-
   const debitHours = Math.max(jornada - netHours, 0);
 
   return {
@@ -181,7 +165,6 @@ let netHours = totalHours;
 //////////////////////////////////////////////////////
 
 app.get('/', (req, res) => {
-
   if (!req.session.user) return res.redirect('/login');
 
   if (req.session.user.role === 'ADMIN') return res.redirect('/admin');
@@ -194,15 +177,11 @@ app.get('/', (req, res) => {
 //////////////////////////////////////////////////////
 
 app.get('/login', (req, res) => {
-
   res.render('login', { error: null });
-
 });
 
 app.post('/login', async (req, res) => {
-
   try {
-
     const username = (req.body.username || '').trim();
     const password = (req.body.password || '').trim();
 
@@ -222,11 +201,8 @@ app.post('/login', async (req, res) => {
     };
 
     res.redirect('/');
-
   } catch (error) {
-
     console.error('Error login:', error);
-
     res.status(500).send('Error en el servidor');
   }
 });
@@ -236,11 +212,9 @@ app.post('/login', async (req, res) => {
 //////////////////////////////////////////////////////
 
 app.get('/logout', (req, res) => {
-
   req.session.destroy(() => {
     res.redirect('/login');
   });
-
 });
 
 //////////////////////////////////////////////////////
@@ -248,9 +222,7 @@ app.get('/logout', (req, res) => {
 //////////////////////////////////////////////////////
 
 app.get('/mecanico', requireAuth('MECANICO'), async (req, res) => {
-
   try {
-
     const today = hoyISO();
     const userId = req.session.user.id;
 
@@ -269,11 +241,8 @@ app.get('/mecanico', requireAuth('MECANICO'), async (req, res) => {
       jobs,
       today
     });
-
   } catch (error) {
-
     console.error(error);
-
     res.status(500).send('Error en el servidor');
   }
 });
@@ -282,116 +251,108 @@ app.get('/mecanico', requireAuth('MECANICO'), async (req, res) => {
 // MARCAR ENTRADA
 //////////////////////////////////////////////////////
 
-app.post('/mecanico/entrada',
-requireAuth('MECANICO'),
-upload.single('photo'),
-async (req, res) => {
+app.post(
+  '/mecanico/entrada',
+  requireAuth('MECANICO'),
+  upload.single('photo'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).send('Foto obligatoria');
+      }
 
-  try {
+      const userId = req.session.user.id;
+      const today = hoyISO();
+      const now = new Date();
 
-    if (!req.file) {
-      return res.status(400).send('Foto obligatoria');
+      const [exist] = await db.query(
+        'SELECT id FROM attendance WHERE user_id=? AND date=?',
+        [userId, today]
+      );
+
+      if (exist.length) return res.redirect('/mecanico');
+
+      await db.query(
+        `INSERT INTO attendance
+        (user_id,date,check_in,check_in_photo)
+        VALUES (?,?,?,?)`,
+        [
+          userId,
+          today,
+          now,
+          '/uploads/' + req.file.filename
+        ]
+      );
+
+      res.redirect('/mecanico');
+    } catch (error) {
+      console.error(error);
+      res.status(500).send('Error en servidor');
     }
-
-    const userId = req.session.user.id;
-    const today = hoyISO();
-    const now = new Date();
-
-    const [exist] = await db.query(
-      'SELECT id FROM attendance WHERE user_id=? AND date=?',
-      [userId, today]
-    );
-
-    if (exist.length) return res.redirect('/mecanico');
-
-    await db.query(
-      `INSERT INTO attendance
-      (user_id,date,check_in,check_in_photo)
-      VALUES (?,?,?,?)`,
-      [
-        userId,
-        today,
-        now,
-        process.env.BASE_URL + '/uploads/' + req.file.filename
-      ]
-    );
-
-    res.redirect('/mecanico');
-
-  } catch (error) {
-
-    console.error(error);
-
-    res.status(500).send('Error en servidor');
   }
-});
+);
 
 //////////////////////////////////////////////////////
 // MARCAR SALIDA
 //////////////////////////////////////////////////////
 
-app.post('/mecanico/salida',
-requireAuth('MECANICO'),
-upload.single('photo'),
-async (req, res) => {
+app.post(
+  '/mecanico/salida',
+  requireAuth('MECANICO'),
+  upload.single('photo'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).send('Foto obligatoria');
+      }
 
-  try {
+      const userId = req.session.user.id;
+      const today = hoyISO();
+      const now = new Date();
 
-    if (!req.file) {
-      return res.status(400).send('Foto obligatoria');
+      const [rows] = await db.query(
+        'SELECT * FROM attendance WHERE user_id=? AND date=?',
+        [userId, today]
+      );
+
+      if (!rows.length) return res.redirect('/mecanico');
+
+      const checkIn = new Date(rows[0].check_in);
+
+      const { normalHours, extraHours, debitHours } =
+        calcularHoras(checkIn, now);
+
+      await db.query(
+        `UPDATE attendance
+        SET check_out=?,
+        check_out_photo=?,
+        normal_hours=?,
+        extra_hours=?,
+        debit_hours=?
+        WHERE id=?`,
+        [
+          now,
+          '/uploads/' + req.file.filename,
+          normalHours,
+          extraHours,
+          debitHours,
+          rows[0].id
+        ]
+      );
+
+      res.redirect('/mecanico');
+    } catch (error) {
+      console.error(error);
+      res.status(500).send('Error en servidor');
     }
-
-    const userId = req.session.user.id;
-    const today = hoyISO();
-    const now = new Date();
-
-    const [rows] = await db.query(
-      'SELECT * FROM attendance WHERE user_id=? AND date=?',
-      [userId, today]
-    );
-
-    if (!rows.length) return res.redirect('/mecanico');
-
-    const checkIn = new Date(rows[0].check_in);
-
-    const { normalHours, extraHours, debitHours } =
-      calcularHoras(checkIn, now);
-
-    await db.query(
-      `UPDATE attendance
-      SET check_out=?,
-      check_out_photo=?,
-      normal_hours=?,
-      extra_hours=?,
-      debit_hours=?
-      WHERE id=?`,
-      [
-        now,
-        process.env.BASE_URL + '/uploads/' + req.file.filename,
-        normalHours,
-        extraHours,
-        debitHours,
-        rows[0].id
-      ]
-    );
-
-    res.redirect('/mecanico');
-
-  } catch (error) {
-
-    console.error(error);
-
-    res.status(500).send('Error en servidor');
   }
-});
+);
 
 //////////////////////////////////////////////////////
 // REGISTRAR TRABAJO
 //////////////////////////////////////////////////////
 
-app.post('/mecanico/trabajos',
-requireAuth('MECANICO'),
-async (req, res) => {
+app.post('/mecanico/trabajos', requireAuth('MECANICO'), async (req, res) => {
   try {
     const userId = req.session.user.id;
     const today = hoyISO();
@@ -423,7 +384,6 @@ async (req, res) => {
         description
       }
     });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ ok: false, error: 'Error al guardar' });
@@ -435,16 +395,13 @@ async (req, res) => {
 //////////////////////////////////////////////////////
 
 app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
-
   try {
-
     const { from, to } = req.query;
 
     let startDate = from;
     let endDate = to;
 
     if (!startDate || !endDate) {
-
       const today = new Date();
 
       const weekAgo = new Date(
@@ -478,7 +435,6 @@ app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
     let totalDebits = 0;
 
     rows.forEach(r => {
-
       totalNormal += Number(r.normal_hours || 0);
       totalExtras += Number(r.extra_hours || 0);
       totalDebits += Number(r.debit_hours || 0);
@@ -501,11 +457,8 @@ app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
       totalDebitsFmt: horasAFormato(totalDebits),
       totalBancoFmt: horasAFormato(totalBanco)
     });
-
   } catch (error) {
-
     console.error(error);
-
     res.status(500).send('Error en servidor');
   }
 });
@@ -515,7 +468,5 @@ app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
 //////////////////////////////////////////////////////
 
 app.listen(PORT, () => {
-
   console.log(`Servidor corriendo en puerto ${PORT}`);
-
 });
