@@ -413,11 +413,11 @@ app.get('/admin', requireAuth('ADMIN'), async (req, res) => {
     }
 
     const [rows] = await db.query(
-      `SELECT a.*,u.name
-       FROM attendance a
-       JOIN users u ON a.user_id=u.id
-       WHERE a.date BETWEEN ? AND ?
-       ORDER BY a.date DESC`,
+      `SELECT a.*, u.name, u.sede
+    FROM attendance a
+    JOIN users u ON a.user_id = u.id
+    WHERE a.date BETWEEN ? AND ?
+    ORDER BY u.sede ASC, u.name ASC, a.date DESC`,
       [startDate, endDate]
     );
 
