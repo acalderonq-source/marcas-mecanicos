@@ -392,16 +392,16 @@ async (req, res) => {
 app.post('/mecanico/trabajos',
 requireAuth('MECANICO'),
 async (req, res) => {
-
   try {
-
     const userId = req.session.user.id;
     const today = hoyISO();
 
-    const { plate, job_type, description } = req.body;
+    const plate = (req.body.plate || '').trim().toUpperCase();
+    const job_type = (req.body.job_type || '').trim();
+    const description = (req.body.description || '').trim();
 
     const [attRows] = await db.query(
-      'SELECT * FROM attendance WHERE user_id=? AND date=?',
+      'SELECT id FROM attendance WHERE user_id=? AND date=? LIMIT 1',
       [userId, today]
     );
 
@@ -409,18 +409,24 @@ async (req, res) => {
 
     await db.query(
       `INSERT INTO jobs
-      (user_id,attendance_id,date,plate,job_type,description)
-      VALUES (?,?,?,?,?,?)`,
+      (user_id, attendance_id, date, plate, job_type, description)
+      VALUES (?, ?, ?, ?, ?, ?)`,
       [userId, attendanceId, today, plate, job_type, description]
     );
 
-    res.redirect('/mecanico');
+    res.json({
+      ok: true,
+      job: {
+        date: today,
+        plate,
+        job_type,
+        description
+      }
+    });
 
   } catch (error) {
-
     console.error(error);
-
-    res.status(500).send('Error en servidor');
+    res.status(500).json({ ok: false, error: 'Error al guardar' });
   }
 });
 
